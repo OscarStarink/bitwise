@@ -37,6 +37,13 @@ class Top:
 	inc = opt == ord('+') 
 	sub = opt == ord('-')
 	
+	left = opt == ord('<')
+	right = opt == ord('>')
+	
+	
+	sp = when( left | right, sp_in + when(right, bit[8](1), bit[8](-1) ) , sp_in )
+	
+	
 	#ip = add(ip_in, bit[8](1) )
 	ip = ip_in + bit[8](1)
 	
@@ -45,7 +52,7 @@ class Top:
 	
 	
 	ip_out = output(ip)
-	sp_out = output(sp_in)
+	sp_out = output(sp)
 	mem_out = output(mem)
 	
 	
@@ -65,6 +72,10 @@ class Sim:
 		self.top.sp_out = 0
 		self.top.mem_out = 0
 		self.stack = [0]*256
+		
+	def steps(self, n):
+		for _ in range(n):
+			self.step()
 	
 	def step(self):
 		self.top.ip_in = self.top.ip_out
@@ -75,22 +86,26 @@ class Sim:
 		self.top.update()
 		
 		self.stack[self.top.sp_in] = self.top.mem_out
-		
-
-sim = Sim(top, [ ord(x) for x in ['+', '+', '-'] ] )
+	
 
 
+def test_add_sub():
+	sim = Sim(top, [ ord(x) for x in "++-" ] )
+	sim.steps(2)
+	assert sim.stack[0] == 2
+	sim.step()
+	assert sim.stack[0] == 1
+	
+def test_move():
+	sim = Sim(top, [ ord(x) for x in ">>+<+" ] )
+	sim.steps(3)
+	assert sim.stack[2] == 1
+	sim.steps(2)
+	assert sim.stack[1] == 1
 
+def test():
+	test_add_sub()
+	test_move()
 
-sim.step()
-print(sim.top.ip_out)
-sim.step()
-print(sim.top.ip_out)
-print(sim.stack[:3])
-sim.step()
-print(sim.top.ip_out)
-print(sim.stack[:3])
-
-#top.evaluate(x, n, dir=0, shift=0, arith=0).y
-
+test()
 
