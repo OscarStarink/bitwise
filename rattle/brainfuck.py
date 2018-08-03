@@ -27,6 +27,30 @@ def add(x, y, c=0):
     return s
 
 @module
+class Decode:
+	opt = input(bit[8])
+	
+	inc = output( opt == ord('+') )
+	dec = output( opt == ord('-') )
+	
+	left = output( opt == ord('<') )
+	right = output( opt == ord('>') )
+	
+	putc = output( opt == ord('.') )
+	getc = output( opt == ord(',') )
+
+@module
+class Incrementor:
+	N = 8 # Can we do generic?
+	i = input(bit[N])
+	inc = input(bit)
+	dec = input(bit)
+	
+	val = when( inc | dec, i + when(inc, bit[N](1), bit[N](-1) ) , i )
+
+	o = output(val)
+	
+@module
 class Top:
 	opt = input(bit[8])
 	mem_in = input(bit[8])
@@ -37,34 +61,26 @@ class Top:
 	rx_valid = input(bit)
 	rx_in = input(bit[8])
 	
+	decode = Decode(opt = opt)
+	
+	stall = decode.putc & ~tx_ready | decode.getc & ~rx_valid
+	
+	sp = Incrementor(inc=decode.right, dec=decode.left, i=sp_in)
 	
 	
-	inc = opt == ord('+') 
-	sub = opt == ord('-')
 	
-	left = opt == ord('<')
-	right = opt == ord('>')
+	ip = Incrementor( inc=~stall, i=ip_in, dec=False) 
 	
+	alu = Incrementor(inc = decode.inc, dec = decode.dec, i = mem_in) 
 	
-	putc = opt == ord('.')
-	getc = opt == ord(',')
+	mem = when(decode.getc & rx_valid, rx_in, alu.o)
 	
-	stall = putc & ~tx_ready | getc & ~rx_valid
-	
-	sp = when( left | right, sp_in + when(right, bit[8](1), bit[8](-1) ) , sp_in )
-	
-	
-	#ip = add(ip_in, bit[8](1) )
-	ip = when( stall, ip_in, ip_in + bit[8](1) )
-	
-	mem = when(inc | sub, mem_in + when(inc, bit[8](1), bit[8](-1) ) , when(getc & rx_valid, rx_in, mem_in))	
-	
-	rx_ready = output( getc )
-	tx_valid = output( putc )
+	rx_ready = output( decode.getc )
+	tx_valid = output( decode.putc )
 	tx_out = output( mem_in )
 	
-	ip_out = output(ip)
-	sp_out = output(sp)
+	ip_out = output(ip.o )
+	sp_out = output(sp.o )
 	mem_out = output(mem)
 	
 	
