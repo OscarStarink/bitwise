@@ -91,7 +91,7 @@ class Top:
 	
 
 	# TODO ALU could be used to update brace counter
-	brace = Incrementor( i=brace_in, inc=seek_forward & decode.loop | seek_back & decode.lend, dec=seek_forward_in & decode.lend | seek_back_in & decode.loop )
+	brace = Incrementor( i=brace_in, inc=seek_forward_in & decode.loop | seek_back_in & decode.lend, dec=(seek_forward_in & decode.lend | seek_back_in & decode.loop ) & ~brace_null )
 	
 	
 	seek_back_out = output(seek_back)
@@ -130,7 +130,7 @@ class Sim:
 		self.stdout = []
 		self.top.tx_ready = True
 		
-		self.top.brace_out = -1
+		self.top.brace_out = 0
 		self.top.seek_forward_out = False
 		self.top.seek_back_out = False
 		
@@ -223,7 +223,7 @@ def test_loop_skip():
 	assert sim.top.seek_forward_out == True
 	sim.steps(3)
 	assert sim.stdout == [0]
-	assert sim.top.brace_out == 255
+	assert sim.top.brace_out == 0
 	
 def test_loop_rewind():
 	sim = Sim(top, [ ord(x) for x in "+++[.-]." ] )
@@ -235,7 +235,7 @@ def test_loop_rewind():
 	assert sim.stdout == [3, 2, 1]
 	sim.steps(3)
 	assert sim.stdout == [3, 2, 1, 0]
-	assert sim.top.brace_out == 255
+	assert sim.top.brace_out == 0
 
 def test_loop_nested():
 	sim = Sim(top, [ ord(x) for x in "+++[>+++[>+++<-]<-]>>." ] )
