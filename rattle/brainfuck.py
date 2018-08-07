@@ -85,9 +85,9 @@ class Top:
 	
 	mem = when(decode.getc & rx_valid, rx_in, mem_in)
 	
-	sp = Incrementor(inc=decode.right & interpret, dec=decode.left&interpret, i=sp_in)
-	ip = Incrementor(inc=~stall&interpret | seek_forward, i=ip_in, dec=seek_back ) 	
-	alu = Incrementor(inc = decode.inc&interpret, dec = decode.dec&interpret, i=mem)
+	sp = Incrementor(inc=decode.right & interpret_in, dec=decode.left & interpret_in, i=sp_in)
+	ip = Incrementor(inc=~stall & interpret | seek_forward, dec=seek_back, i=ip_in )
+	alu = Incrementor(inc=decode.inc & interpret_in, dec=decode.dec & interpret_in, i=mem)
 	
 
 	# TODO ALU could be used to update brace counter
@@ -98,8 +98,8 @@ class Top:
 	seek_forward_out = output(seek_forward)
 	
 	
-	rx_ready = output(decode.getc & interpret)
-	tx_valid = output(decode.putc & interpret)
+	rx_ready = output(decode.getc & interpret_in)
+	tx_valid = output(decode.putc & interpret_in)
 	tx_out = output(mem_in)
 	
 	brace_out = output(brace.o)
