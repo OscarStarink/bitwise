@@ -1,32 +1,6 @@
 from rattle import *
 
 @module
-class Add3:
-    x = input(bit)
-    y = input(bit)
-    ci = input(bit)
-    p = x ^ y
-    g = x & y
-    s = output(p ^ ci)
-    co = output(g | (p & ci))
-    # co = output((x & y) | (x & ci) | (y & ci))
-
-def add3(x, y, c):
-    adder = Add3(x=x, y=y, ci=c)
-    return adder.s, adder.co
-
-def adc(x, y, c=0):
-    s = []
-    for xi, yi in zip(x, y):
-        si, c = add3(xi, yi, c)
-        s.append(si)
-    return bits(s), c
-
-def add(x, y, c=0):
-    s, c = adc(x, y, c)
-    return s
-
-@module
 class Decoder:
 	opt = input(bit[8])
 	
@@ -44,7 +18,7 @@ class Decoder:
 
 @module
 class Incrementor:
-	N = 8 # Can we do generic?
+	N = 8 # Can we do generics?
 	i = input(bit[N])
 	inc = input(bit)
 	dec = input(bit)
@@ -53,7 +27,11 @@ class Incrementor:
 	val = when( inc | dec, i + when(inc, bit[N](1), bit[N](-1) ) , i )
 
 	o = output(val)
-	
+
+
+# When enabled, Top uses register() instead of emulated register (_in & _out pairs), which will trigger the 'Cyclic node graph'
+false_cycle = True
+
 @module
 class Top:
 	opt = input(bit[8])
@@ -71,12 +49,17 @@ class Top:
 	
 	brace_in = input(bit[8]) 
 	
+	if false_cycle:
+		brace = register(bit[8]) 
+	else:
+		brace = brace_in
+	
 	decode = Decoder(opt = opt)
 	
 	stall = decode.putc & ~tx_ready | decode.getc & ~rx_valid
 	
 	mem_null = mem_in == 0
-	brace_null = brace_in == 0
+	brace_null = brace == 0
 	
 	seek_forward = mem_null & interpret_in & decode.loop | seek_forward_in & ~(brace_null & decode.lend)
 	seek_back = ~mem_null & interpret_in & decode.lend | seek_back_in & ~(brace_null & decode.loop)
@@ -91,8 +74,10 @@ class Top:
 	
 
 	# TODO ALU could be used to update brace counter
-	brace = Incrementor( i=brace_in, inc=seek_forward_in & decode.loop | seek_back_in & decode.lend, dec=(seek_forward_in & decode.lend | seek_back_in & decode.loop ) & ~brace_null )
+	brace_inc = Incrementor( i=brace, inc=seek_forward_in & decode.loop | seek_back_in & decode.lend, dec=(seek_forward_in & decode.lend | seek_back_in & decode.loop ) & ~brace_null )
 	
+	if false_cycle:
+		brace.next = brace_inc.o
 	
 	seek_back_out = output(seek_back)
 	seek_forward_out = output(seek_forward)
@@ -102,12 +87,12 @@ class Top:
 	tx_valid = output(decode.putc & interpret_in)
 	tx_out = output(mem_in)
 	
-	brace_out = output(brace.o)
+	brace_out = output(brace_inc.o)
 	ip_out = output(ip.o)
 	sp_out = output(sp.o)
 	mem_out = output(alu.o)
-	
-	
+
+
 open('example.dot', 'w').write(generate_dot_file(Top))
 
 
