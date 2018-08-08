@@ -29,31 +29,23 @@ class Incrementor:
 	o = output(val)
 
 
-# When enabled, Top uses register() instead of emulated register (_in & _out pairs), which will trigger the 'Cyclic node graph'
-false_cycle = True
-
 @module
 class Top:
 	opt = input(bit[8])
 	mem_in = input(bit[8])
-	ip_in = input(bit[8])
-	sp_in = input(bit[8])
 	
 	tx_ready = input(bit)
 	rx_valid = input(bit)
 	rx_in = input(bit[8])
 	
-	seek_back_in = input(bit)
-	seek_forward_in = input(bit)
-	interpret_in = ~seek_back_in  & ~seek_forward_in
-	
-	brace_in = input(bit[8]) 
-	
-	if false_cycle:
-		brace = register(bit[8]) 
-	else:
-		brace = brace_in
-	
+	ip = register(bit[8])
+	sp = register(bit[8])
+	brace = register(bit[8])
+
+	seek_back = register(bit)
+	seek_forward = register(bit)
+	interpret = ~seek_back  & ~seek_forward
+		
 	decode = Decoder(opt = opt)
 	
 	stall = decode.putc & ~tx_ready | decode.getc & ~rx_valid
@@ -61,35 +53,30 @@ class Top:
 	mem_null = mem_in == 0
 	brace_null = brace == 0
 	
-	seek_forward = mem_null & interpret_in & decode.loop | seek_forward_in & ~(brace_null & decode.lend)
-	seek_back = ~mem_null & interpret_in & decode.lend | seek_back_in & ~(brace_null & decode.loop)
+	seek_forward.next = mem_null & interpret & decode.loop | seek_forward & ~(brace_null & decode.lend)
+	seek_back.next = ~mem_null & interpret & decode.lend | seek_back & ~(brace_null & decode.loop)
 	
-	interpret = ~seek_back & ~seek_forward
+	interpret_next = ~seek_back.next & ~seek_forward.next
 	
 	mem = when(decode.getc & rx_valid, rx_in, mem_in)
 	
-	sp = Incrementor(inc=decode.right & interpret_in, dec=decode.left & interpret_in, i=sp_in)
-	ip = Incrementor(inc=~stall & interpret | seek_forward, dec=seek_back, i=ip_in )
-	alu = Incrementor(inc=decode.inc & interpret_in, dec=decode.dec & interpret_in, i=mem)
+	sp_inc = Incrementor(inc=decode.right & interpret, dec=decode.left & interpret, i=sp)
+	ip_inc = Incrementor(inc=~stall & interpret_next | seek_forward.next, dec=seek_back.next, i=ip )
+	alu = Incrementor(inc=decode.inc & interpret, dec=decode.dec & interpret, i=mem)
 	
 
 	# TODO ALU could be used to update brace counter
-	brace_inc = Incrementor( i=brace, inc=seek_forward_in & decode.loop | seek_back_in & decode.lend, dec=(seek_forward_in & decode.lend | seek_back_in & decode.loop ) & ~brace_null )
+	brace_inc = Incrementor( i=brace, inc=seek_forward & decode.loop | seek_back & decode.lend, dec=(seek_forward & decode.lend | seek_back & decode.loop ) & ~brace_null )
 	
-	if false_cycle:
-		brace.next = brace_inc.o
+	brace.next = brace_inc.o
+	ip.next = ip_inc.o
+	sp.next = sp_inc.o
 	
-	seek_back_out = output(seek_back)
-	seek_forward_out = output(seek_forward)
-	
-	
-	rx_ready = output(decode.getc & interpret_in)
-	tx_valid = output(decode.putc & interpret_in)
+	rx_ready = output(decode.getc & interpret)
+	tx_valid = output(decode.putc & interpret)
 	tx_out = output(mem_in)
-	
-	brace_out = output(brace_inc.o)
-	ip_out = output(ip.o)
-	sp_out = output(sp.o)
+	ip_out = output(ip)
+	sp_out = output(sp)
 	mem_out = output(alu.o)
 
 
@@ -108,31 +95,18 @@ class Sim:
 	
 	def reset(self):
 		self.i = 1
-		self.top.ip_out = 0
-		self.top.sp_out = 0
 		self.top.mem_out = 0
 		self.stack = [0]*256
 		self.stdout = []
 		self.top.tx_ready = True
-		
-		self.top.brace_out = 0
-		self.top.seek_forward_out = False
-		self.top.seek_back_out = False
-		
 		
 	def steps(self, n):
 		for _ in range(n):
 			self.step()
 	
 	def step(self):
-		self.top.ip_in = self.top.ip_out
-		self.top.sp_in = self.top.sp_out
-		self.top.mem_in = self.stack[self.top.sp_out]
-		self.top.opt = self.prog[self.top.ip_out]
-		
-		self.top.seek_forward_in = self.top.seek_forward_out
-		self.top.seek_back_in = self.top.seek_back_out
-		self.top.brace_in = self.top.brace_out
+		self.top.mem_in = self.stack[self.top.sp]
+		self.top.opt = self.prog[self.top.ip]
 		
 		self.top.rx_in = self.stdin[0] if len(self.stdin) else 0
 		self.top.rx_valid = len(self.stdin) > 0
@@ -144,20 +118,21 @@ class Sim:
 			if self.top.seek_back_in:
 				mode = 'back'
 		
-			print("in {} {} {} {}".format(self.i, chr(self.top.opt), self.top.brace_in, mode) )
+			print("in {} {} {} {}".format(self.i, chr(self.top.opt), self.top.brace, mode) )
 		
 		
 		self.top.update(**self.kwargs)
 		
-		
 		self.i = self.i + 1
 		
-		self.stack[self.top.sp_in] = self.top.mem_out
+		self.stack[self.top.sp] = self.top.mem_out
 		if self.top.tx_valid and self.top.tx_ready:
 			self.stdout.append(self.top.tx_out)
 			
 		if self.top.rx_valid and self.top.rx_ready:	
 			self.stdin.pop(0)
+			
+		self.top.tick()
 
 
 def test_add_sub():
@@ -196,31 +171,31 @@ def test_read():
 def test_loop_cond():
 	sim = Sim(top, [ ord(x) for x in "+[.-]." ] )
 	sim.steps(2)
-	assert sim.top.seek_forward_out == False
+	assert sim.top.seek_forward == False
 	sim.steps(3)
-	assert sim.top.seek_back_out == False
+	assert sim.top.seek_back == False
 	sim.step()
 	assert sim.stdout == [1, 0]
 	
 def test_loop_skip():
 	sim = Sim(top, [ ord(x) for x in "[.]." ] )
 	sim.step()
-	assert sim.top.seek_forward_out == True
+	assert sim.top.seek_forward == True
 	sim.steps(3)
 	assert sim.stdout == [0]
-	assert sim.top.brace_out == 0
+	assert sim.top.brace == 0
 	
 def test_loop_rewind():
 	sim = Sim(top, [ ord(x) for x in "+++[.-]." ] )
 	sim.steps(7)
-	assert sim.top.seek_back_out == True
+	assert sim.top.seek_back == True
 	sim.steps(4)
 	assert sim.stdout == [3, 2]
 	sim.steps(6)
 	assert sim.stdout == [3, 2, 1]
 	sim.steps(3)
 	assert sim.stdout == [3, 2, 1, 0]
-	assert sim.top.brace_out == 0
+	assert sim.top.brace == 0
 
 def test_loop_nested():
 	sim = Sim(top, [ ord(x) for x in "+++[>+++[>+++<-]<-]>>." ] )
