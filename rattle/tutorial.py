@@ -755,7 +755,120 @@ class Example39:
     p = output(p_reg)
     p_valid = output(p_valid_reg)
 
-open('example.dot', 'w').write(generate_dot_file(Example39))
+@module
+class Example40:
+    x = input(bit[N])
+    y = output(delay(x))
+
+def combinational_multiplier(x, y):
+    p = 0
+    for i in range(len(x)):
+        x, y, p = x >> 1, y << 1, p + when(x[0], y, 0)
+    return p
+
+@module
+class Example41:
+    x = input(bit[N])
+    y = input(bit[N])
+    p = output(combinational_multiplier(x, y))
+
+def pipelined_multiplier(x, y, enable):
+    p, p_valid = 0, enable
+    for i in range(len(x)):
+        x, y, p, p_valid = delay((x >> 1, y << 1, p + when(x[0], y, 0), p_valid))
+    return p, p_valid
+
+@module
+class Example42:
+    x = input(bit[N])
+    y = input(bit[N])
+    enable = input(bit)
+    p, p_valid = pipelined_multiplier(x, y, enable)
+    p = output(p)
+    p_valid = output(p_valid)
+    # p, p_valid = output(pipelined_multiplier(x, y, enable))
+
+
+def mux(addr, data):
+    assert ispow2(len(data))
+    if len(data) == 1:
+        return data[0]
+    else:
+        i = len(data) // 2
+        return when(addr[-1], mux(addr[:-1], data[i:]), mux(addr[:-1], data[:i]))
+
+@module
+def memory(data_type, size):
+    assert ispow2(size)
+    addr_type = bit[clog2(size)]
+
+    cells = [register(data_type) for i in range(size)]
+
+    write_enable = input(bit)
+    write_addr = input(addr_type)
+    write_data = input(data_type)
+
+    read_addr = input(addr_type)
+
+    # Read-after-write semantics: Bypass write data to read data if addresses match.
+    read_data = output(delay(when(write_enable & (read_addr == write_addr), write_data, mux(read_addr, cells))))
+
+    for i, cell in enumerate(cells):
+        cell.next = when(write_enable & (write_addr == i), write_data, cell)
+
+def rotl(x, n):
+    return ((x << n) & mask) | ((x >> (N - n)) & mask)
+
+def rotr(x, n):
+    return ((x >> n) & mask) | ((x << (N - n)) & mask)
+
+def simulate_test(sim, *tests):
+    sim_inst = sim()
+    testers = set(test(sim_inst) for test in tests)
+    while testers:
+        stopped = set()
+        for tester in testers:
+            try:
+                next(tester)
+            except StopIteration:
+                stopped.add(tester)
+
+        sim_inst.tick()
+        sim_inst.update()
+
+        testers.difference_update(stopped)
+
+@module
+def fifo(data_type, size):
+    assert ispow2(size)
+
+    mem = memory(data_type, size)()
+
+    enqueue_enable = input(bit)
+    enqueue_data = input(data_type)
+    dequeue_enable = input(bit)
+
+    addr_type = bit[clog2(size)]    
+    read_addr = register(addr_type)
+    write_addr = register(addr_type)
+
+    not_empty = read_addr != write_addr
+    not_full = write_addr + 1 != read_addr
+
+    enqueue_ready = output(not_full)
+    dequeue_ready = output(not_empty)
+
+    read_addr.next = when(dequeue_enable & dequeue_ready, read_addr + 1, read_addr)
+    write_addr.next = when(enqueue_enable & enqueue_ready, write_addr + 1, write_addr)
+
+    mem.read_addr = read_addr.next
+    dequeue_data = output(mem.read_data)
+
+    mem.write_enable = enqueue_enable & enqueue_ready
+    mem.write_addr = write_addr
+    mem.write_data = enqueue_data
+
+open('example.dot', 'w').write(generate_dot_file(Example42))
 
 do_timing_analysis = False
 if do_timing_analysis:
@@ -776,25 +889,6 @@ fints = range(2**(2*N - 1))
  
 print(analyze_delay(Example36))
 print(analyze_delay(Example37))
-
-def rotl(x, n):
-    return ((x << n) & mask) | ((x >> (N - n)) & mask)
-
-def rotr(x, n):
-    return ((x >> n) & mask) | ((x << (N - n)) & mask)
-
-def simulate_test(sim, test):
-    sim_inst = sim()
-    tester = test(sim_inst)
-    while True:
-        try:
-            next(tester)
-        except StopIteration:
-            return
-
-        sim_inst.update()
-        sim_inst.tick()
-        sim_inst.update()
 
 do_tests = True
 if do_tests:
@@ -1048,59 +1142,169 @@ if do_tests:
     #             q = example36.evaluate(n, d).q
     #             assert q == n // d
 
-    example37 = compile(Example37)
-    for n in uints:
-        for d in uints:
-            if d != 0:
-                q = example37.evaluate(n, d, trace=True).q
-                assert q == n // d
+    # example37 = compile(Example37)
+    # for n in uints:
+    #     for d in uints:
+    #         if d != 0:
+    #             q = example37.evaluate(n, d, trace=True).q
+    #             assert q == n // d
 
-    example38 = compile(Example38)
+    # example38 = compile(Example38)
 
-    example38_instance = example38()
-    for i in range(10):
-        example38_instance.enable = i % 2
-        example38_instance.update()
-        print("i = %s, value = %s" % (i, example38_instance.value))
-        example38_instance.tick()
-        example38_instance.update()
+    # example38_instance = example38()
+    # for i in range(10):
+    #     example38_instance.enable = i % 2
+    #     example38_instance.tick()
+    #     example38_instance.update()
+    #     print("i = %s, value = %s" % (i, example38_instance.value))
 
-    example38_instance = example38()
-    example38_instance.enable = 1
-    for i, outputs in zip(range(20), example38_instance):
-        print("i = %s, value = %s" % (i, outputs.value))
+    # example38_instance = example38()
+    # example38_instance.enable = 1
+    # for i, outputs in zip(range(20), example38_instance):
+    #     print("i = %s, value = %s" % (i, outputs.value))
 
-    example39 = compile(Example39)
+    # example39 = compile(Example39)
 
-    example39_instance = example39()
-    for x in uints:
-        for y in uints:
-            for i, outputs in enumerate(example39_instance):
-                if i == 0:
-                    example39_instance.x = x
-                    example39_instance.y = y
-                    example39_instance.enable = 1
-                else:
-                    example39_instance.enable = 0
+    # example39_instance = example39()
+    # for x in uints:
+    #     for y in uints:
+    #         for i, outputs in enumerate(example39_instance):
+    #             if i == 0:
+    #                 example39_instance.x = x
+    #                 example39_instance.y = y
+    #                 example39_instance.enable = 1
+    #             else:
+    #                 example39_instance.enable = 0
 
-                    if example39_instance.p_valid:
-                        break
+    #                 if example39_instance.p_valid:
+    #                     break
 
-            assert example39_instance.p == (x*y) & mask
+    #         assert example39_instance.p == (x * y) & mask
 
-    def example39_test(multiplier):
-        for x in uints:
-            for y in uints:
-                multiplier.x = x
-                multiplier.y = y
-                multiplier.enable = 1
+    # def example39_test(self):
+    #     for x in uints:
+    #         for y in uints:
+    #             self.x = x
+    #             self.y = y
+    #             self.enable = 1
+    #             yield
+
+    #             self.enable = 0
+    #             while not self.p_valid:
+    #                 yield
+
+    #             assert self.p == (x * y) & mask
+
+    # simulate_test(example39, example39_test)
+
+    # example40 = compile(Example40)
+
+    # def example40_test(self):
+    #     for x in uints:
+    #         self.x = x
+    #         yield
+    #         assert self.y == x
+
+    # simulate_test(example40, example40_test)
+
+    # example41 = compile(Example41)
+
+    # for x in uints:
+    #     for y in uints:
+    #         p = example41.evaluate(x, y).p
+    #         assert p == (x * y) & mask
+
+    # example42 = compile(Example42)
+
+    # def example42_test(self):
+    #     for x in uints:
+    #         for y in uints:
+    #             self.x = x
+    #             self.y = y
+    #             self.enable = 1
+    #             yield
+
+    #             self.enable = 0
+    #             while not self.p_valid:
+    #                 yield
+
+    #             assert self.p == (x * y) & mask
+
+    # simulate_test(example42, example42_test)
+
+    # def example42_test_producer(self):
+    #     for x in uints:
+    #         for y in uints:
+    #             self.x = x
+    #             self.y = y
+    #             self.enable = 1
+    #             yield
+
+    #     self.enable = 0
+
+    # def example42_test_consumer(self):
+    #     for x in uints:
+    #         for y in uints:
+    #             while not self.p_valid:
+    #                 yield
+
+    #             assert self.p == (x * y) & mask
+    #             yield
+
+    # simulate_test(example42, example42_test_producer, example42_test_consumer)
+
+    # memory_example = compile(memory(bit[8], 64))
+
+    # def memory_example_test(self):
+    #     def scramble(i):
+    #         return (i * 0xdeadbeef) & 0xff
+
+    #     for i in range(64):
+    #         self.read_addr = i
+    #         yield
+    #         assert self.read_data == 0
+
+    #     for i in range(64):
+    #         self.write_enable = 1
+    #         self.write_addr = i
+    #         self.write_data = scramble(i)
+    #         yield
+
+    #     self.write_enable = 0
+        
+    #     for i in range(64):
+    #         self.read_addr = i
+    #         yield
+    #         assert self.read_data == scramble(i)
+
+    # simulate_test(memory_example, memory_example_test)
+    
+    fifo_example = compile(fifo(bit[8], 64))
+
+    def fifo_test_producer(self):
+        yield
+        for i in range(256):
+            self.enqueue_enable = 1
+            self.enqueue_data = i
+            while not self.enqueue_ready:
                 yield
 
-                multiplier.enable = 0
+            yield
+        
+        self.enqueue_enable = 0
 
-                while not multiplier.p_valid:
-                    yield
+    def fifo_test_consumer(self):
+        # for i in range(100):
+        #     yield
 
-                assert multiplier.p == (x * y) & mask
+        for i in range(256):
+            self.dequeue_enable = 1
+            while not self.dequeue_ready:
+                yield
 
-    simulate_test(example39, example39_test)
+            assert self.dequeue_data == i
+            yield
+
+        self.dequeue_enable = 0
+
+    simulate_test(fifo_example, fifo_test_producer, fifo_test_consumer)
