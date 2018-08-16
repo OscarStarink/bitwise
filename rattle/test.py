@@ -23,12 +23,12 @@ def Test(IntroduceCycle):
 	r2.next = in_inc.o if IntroduceCycle else 0
 
 def test():
-
+	open('test1.dot', 'w').write(generate_dot_file(Test(False)))
 	compile(Test(False))
-	generate_dot_file(Test(False))
 	
-	compile(Test(True))
-	generate_dot_file(Test(True))
+	open('test2.dot', 'w').write(generate_dot_file(Test(True)))
+	#compile(Test(True))
+	
 
 if __name__ == "__main__":
 	test()
