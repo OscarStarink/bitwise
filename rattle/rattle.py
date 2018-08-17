@@ -662,7 +662,6 @@ def module(x):
 
 UNVISITED = object()
 VISITING = object()
-VISITED = object()
 
 class Pass:
     def __init__(self):
@@ -671,11 +670,8 @@ class Pass:
     def default(self, node):
         raise NotImplementedError("Unhandled default case in visitor")
 
-    def get_default(self):
-        return UNVISITED
-
     def get(self, node):
-        return self.values.get(wrap(node), self.get_default() )
+        return self.values.get(wrap(node), UNVISITED)
 
     def set(self, node, value):
         self.values[wrap(node)] = value
@@ -710,44 +706,16 @@ class DotGenerator(Pass):
         self.lines = []
         self.next_id = 0
 
-    def get_default(self):
-        return (UNVISITED, None, None)
-
-    def __call__(self, node):
-        tag, name, path = self.get(node)
-        if tag is VISITING:
-            raise ValueError("Cyclic node graph")
-        elif tag is UNVISITED:
-            handler = getattr(self, type(node).__name__, self.default)
-            self.set(node, (VISITING, name, path) )
-            handler(node)
-            _, name, path = self.get(node)
-            self.set(node, (VISITED, name, path))
-        return path
-
     def line(self, x):
         self.lines.append(x)
 
-    def make_name(self, node, suffix=None, name=None, new_tag=VISITED):
-        tag, n, p = self.get(node)
-        if n != None:
-            path = p
-            name = n
-        else:
-            if name is None:
-                name = "n%d" % self.next_id
-                self.next_id += 1
-            path = name + suffix if suffix else name
-
-        if new_tag != False:
-            tag = new_tag
-
-        self.set(node, (tag, name, path))
+    def make_name(self, node, suffix=None, name=None):
+        if name is None:
+            name = "n%d" % self.next_id
+            self.next_id += 1
+        path = name + suffix if suffix else name
+        self.set(node, path)
         return name, path
-
-    def peek_path(self, node):
-        name, path = self.make_name(node, new_tag=False)
-        return path
 
     def vertex(self, name, shape, label):
         self.vertices[name] = '%s [ shape = %s, label = "%s" ];' % (name, shape, label)
@@ -845,8 +813,7 @@ class DotGenerator(Pass):
         return path
 
     def InstanceOutputNode(self, node):
-        name, path = self.make_name(node, name='%s:%s' % (self.peek_path(node.module), node.name))
-        self(node.module)
+        name, path = self.make_name(node, name='%s:%s' % (self(node.module), node.name))
         return path
 
     def Module(self, module):
@@ -946,7 +913,6 @@ class Transformer(Pass):
         return getattr(new_module, node.name)
 
     def InstanceOutputNode(self, node):
-        # NOTE(os) This looks wrong!
         return self.InstanceInputNode(self, node)
 
     def Module(self, module):

@@ -37,11 +37,26 @@ class Test2:
 	inv = DoubleInv(i1=i)
 	inv.i2 = inv.o1
 	o = output(inv.o2)	
-	
+
+@module
+class BlackBox:
+	i1 = input(bit[8])
+	i2 = input(bit[8])
+	i3 = input(bit[8])
+	o = output(bit[8](0))
+
+@module
+class Test3:
+	in1 = input(bit[8])
+	box = BlackBox(i1=in1)
+	box.i2=box.o
+	box.i3=box.o
+	out1 = output(box.o)
+
 class TestCycleNodeGraph(unittest.TestCase):	
 
 	def test_1_false_dot(self):
-		generate_dot_file(Test1(False))
+		open('test1_false.dot', 'w').write(generate_dot_file(Test1(False)))
 		
 	def test_1_false_copy(self):
 		copy_module(Test1(False))
@@ -50,7 +65,7 @@ class TestCycleNodeGraph(unittest.TestCase):
 		compile(Test1(False))
 		
 	def test_1_true_dot(self):
-		generate_dot_file(Test1(True))
+		open('test1_true.dot', 'w').write(generate_dot_file(Test1(True)))
 		
 	def test_1_true_copy(self):
 		copy_module(Test1(True))
@@ -59,13 +74,22 @@ class TestCycleNodeGraph(unittest.TestCase):
 		compile(Test1(True))
 		
 	def test_2_dot(self):
-		generate_dot_file(Test2)
+		open('test2.dot', 'w').write(generate_dot_file(Test2))
 		
 	def test_2_copy(self):
 		copy_module(Test2)
 		
 	def test_2_compile(self):	
 		compile(Test2)
-		
+
+	def test_3_dot(self):
+		open('test3.dot', 'w').write(generate_dot_file(Test3))
+
+	def test_3_copy(self):
+		copy_module(Test3)
+
+	def test_3_compile(self):
+		compile(Test3)
+
 if __name__ == "__main__":
 	unittest.main()
