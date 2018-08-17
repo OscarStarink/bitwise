@@ -946,6 +946,7 @@ class Transformer(Pass):
         return getattr(new_module, node.name)
 
     def InstanceOutputNode(self, node):
+        # NOTE(os) This looks wrong!
         return self.InstanceInputNode(self, node)
 
     def Module(self, module):
