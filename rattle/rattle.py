@@ -676,7 +676,7 @@ class Pass:
         self.values = {}
 
     def default(self, node):
-        raise NotImplementedError("Unhandled default case in visitor")
+        raise NotImplementedError("Unhandled default case in visitor, type=%s" % type(node).__name__ )
 
     def get(self, node):
         return self.values.get(wrap(node), UNVISITED)
