@@ -704,10 +704,11 @@ operand_labels = {
 }
 
 class DotGenerator(Pass):
-    def __init__(self, show_names=True, show_types=True):
+    def __init__(self, show_names=True, show_types=True, break_regs=True):
         super().__init__()
         self.show_names = show_names
         self.show_types = show_types
+        self.break_regs = break_regs
         self.inputs = set()
         self.outputs = set()
         self.vertices = {}
@@ -765,13 +766,19 @@ class DotGenerator(Pass):
     def RegisterNode(self, node):
         name, path = self.make_name(node, ':o')
         inputs = []
+        name_next = name + "_next" if self.break_regs else name
         if node.enable is not None:
-            self.edge(self(node.enable), name + ':e')
+            self.edge(self(node.enable), name_next + ':e')
             inputs.append("<e> enable")
         if node.next is not None:
-            self.edge(self(node.next), name + ':n')
+            self.edge(self(node.next), name_next + ':n')
             inputs.append("<n> next")
+
         self.vertex(name, 'record', self.header(node, '{{%s}|register|<o>}' % '|'.join(inputs)))
+        if self.break_regs:
+            self.vertex(name_next, 'record', self.header(node, '{{%s}|register|<o>}' % '|'.join(inputs)))
+            self.inputs.add(name)
+            self.outputs.add(name_next)
         return path
 
     def WireNode(self, node):
