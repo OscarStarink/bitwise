@@ -504,6 +504,14 @@ class OutputNode(Node):
     def __repr__(self):
         return "%s" % self.name
 
+    @property
+    def out(self):
+        raise ValueError("Don't use attribute 'out' to reference output node, use the output node directly!")
+
+    @out.setter
+    def out(self, value):
+        self.connect(value)
+
     def connect(self, node):
         node = as_node(node)
         if self.operand is not None:
